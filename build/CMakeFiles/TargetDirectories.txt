@@ -1,3 +1,0 @@
-C:/Projects/cuda/build/CMakeFiles/compvis.dir
-C:/Projects/cuda/build/CMakeFiles/ALL_BUILD.dir
-C:/Projects/cuda/build/CMakeFiles/ZERO_CHECK.dir
