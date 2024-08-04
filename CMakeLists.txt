@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(compvis LANGUAGES CUDA)
 
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release)
+endif()
+
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -16,3 +20,7 @@ file(GLOB_RECURSE src_files "${CMAKE_SOURCE_DIR}/src/*.cu")
 add_executable(compvis ${src_files})
 
 set_target_properties(compvis PROPERTIES CUDA_ARCHITECTURES native)
+
+find_package(CUDA REQUIRED)
+find_library(NVJPEG_LIBRARY nvjpeg PATHS ${CUDA_TOOLKIT_ROOT_DIR}/lib/x64)
+target_link_libraries(compvis ${NVJPEG_LIBRARY})
