@@ -34,7 +34,7 @@ public:
     // will return encoded jpeg data
     std::vector<unsigned char> *readJPEG(const std::string &filename);
 
-    // will return planar rgb channels, width, height
+    // will return planar rgb channels which are allocated on GPU, width, height
     jpegimage *decodeJPEG(const std::vector<unsigned char> &jpeg_buffer);
 
     // will return encoded jpeg data, quality must be between 1 and 100
@@ -43,6 +43,6 @@ public:
     // write encoded jpeg data to a file
     void writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer);
 
-    // frees cuda memory and deletes the nvjpegImage_t structure
+    // frees cuda memory and deletes the jpegimage structure
     void freeJPEG(jpegimage *image);
 };
