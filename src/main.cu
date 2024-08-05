@@ -1,11 +1,15 @@
 #include "headers.h"
+// ŞÜKRÜ ÇİRİŞ 2024
 
 int main()
 {
-    std::vector<unsigned char> jpegdecoded;
-    std::vector<std::vector<unsigned char>> jpegencoded;
-    jpegprocess::getInstance().loadJPEG("./files/arm.jpg", jpegdecoded);
-    jpegprocess::getInstance().decodeJPEG(jpegdecoded, jpegencoded);
+    std::vector<unsigned char> *encodedjpeg = jpegprocess::getInstance().readJPEG("./files/arm.jpg");
+    jpegimage *decodedjpeg = jpegprocess::getInstance().decodeJPEG(*encodedjpeg);
+    std::vector<unsigned char> *outputjpeg = jpegprocess::getInstance().encodeJPEG(decodedjpeg, 50, true);
+    jpegprocess::getInstance().writeJPEG("./out.jpg", *outputjpeg);
 
+    delete encodedjpeg;
+    delete outputjpeg;
+    jpegprocess::getInstance().freeJPEG(decodedjpeg);
     return 0;
 }

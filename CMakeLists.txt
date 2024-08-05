@@ -11,9 +11,13 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}$<0:>)
 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /NODEFAULTLIB:LIBCMT")
+
 set(INTERPROCEDURAL_OPTIMIZATION ON)
 
-set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} -O3 -DNDEBUG -use_fast_math)
+set(CMAKE_CUDA_FLAGS "-O3 -DNDEBUG -use_fast_math")
 
 file(GLOB_RECURSE src_files "${CMAKE_SOURCE_DIR}/src/*.cu")
 
@@ -21,6 +25,5 @@ add_executable(compvis ${src_files})
 
 set_target_properties(compvis PROPERTIES CUDA_ARCHITECTURES native)
 
-find_package(CUDA REQUIRED)
 find_library(NVJPEG_LIBRARY nvjpeg PATHS ${CUDA_TOOLKIT_ROOT_DIR}/lib/x64)
 target_link_libraries(compvis ${NVJPEG_LIBRARY})

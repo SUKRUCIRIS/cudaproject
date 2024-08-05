@@ -1,4 +1,5 @@
 #pragma once
+// ŞÜKRÜ ÇİRİŞ 2024
 #include <iostream>
 
 #define CHECK_CUDA(call)                                                                                          \
