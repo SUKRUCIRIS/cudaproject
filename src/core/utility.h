@@ -21,3 +21,11 @@
             exit(-1);                                                                                       \
         }                                                                                                   \
     }
+
+#define SET_UCHAR(value) ((value) > 255 ? 255 : ((value) < 0 ? 0 : (value)));
+
+#define GET_MINDEX(row, column, width) ((row) * (width) + (column));
+
+#define GET_MROW(index, width) ((index) / (width));
+
+#define GET_MCOLUMN(index, width) ((index) % (width));

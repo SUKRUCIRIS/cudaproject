@@ -2,7 +2,7 @@
 #include "utility.h"
 // ŞÜKRÜ ÇİRİŞ 2024
 
-jpegprocess::jpegprocess(void)
+SKR::jpegprocess::jpegprocess(void)
 {
     CHECK_NVJPEG(nvjpegCreateSimple(&handle))
     CHECK_NVJPEG(nvjpegJpegStateCreate(handle, &state))
@@ -11,13 +11,13 @@ jpegprocess::jpegprocess(void)
     CHECK_NVJPEG(nvjpegEncoderParamsCreate(handle, &enc_params, stream));
 }
 
-jpegprocess &jpegprocess::getInstance()
+SKR::jpegprocess &SKR::jpegprocess::getInstance()
 {
     static jpegprocess ins;
     return ins;
 }
 
-std::vector<unsigned char> *jpegprocess::readJPEG(const std::string &filename)
+std::vector<unsigned char> *SKR::jpegprocess::readJPEG(const std::string &filename)
 {
     std::vector<unsigned char> *buffer = new std::vector<unsigned char>;
     std::cout << "Reading " << filename << std::endl;
@@ -42,7 +42,7 @@ std::vector<unsigned char> *jpegprocess::readJPEG(const std::string &filename)
     return buffer;
 }
 
-jpegimage *jpegprocess::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer)
+SKR::jpegimage *SKR::jpegprocess::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer)
 {
     std::cout << "Decoding" << std::endl;
     int nComponents;
@@ -76,7 +76,7 @@ jpegimage *jpegprocess::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer
     return output_image;
 }
 
-jpegprocess::~jpegprocess()
+SKR::jpegprocess::~jpegprocess()
 {
     CHECK_NVJPEG(nvjpegEncoderParamsDestroy(enc_params));
     CHECK_NVJPEG(nvjpegEncoderStateDestroy(enc_state));
@@ -85,7 +85,7 @@ jpegprocess::~jpegprocess()
     CHECK_CUDA(cudaStreamDestroy(stream));
 }
 
-void jpegprocess::freeJPEG(jpegimage *image)
+void SKR::jpegprocess::freeJPEG(jpegimage *image)
 {
     for (int i = 0; i < NVJPEG_MAX_COMPONENT; i++)
     {
@@ -95,7 +95,7 @@ void jpegprocess::freeJPEG(jpegimage *image)
     delete image;
 }
 
-std::vector<unsigned char> *jpegprocess::encodeJPEG(const jpegimage *image, const int quality, const bool isgray)
+std::vector<unsigned char> *SKR::jpegprocess::encodeJPEG(const jpegimage *image, const int quality, const bool isgray)
 {
     std::cout << "Encoding" << std::endl;
     if (isgray)
@@ -128,7 +128,7 @@ std::vector<unsigned char> *jpegprocess::encodeJPEG(const jpegimage *image, cons
     return encoded;
 }
 
-void jpegprocess::writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer)
+void SKR::jpegprocess::writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer)
 {
     std::cout << "Writing " << filename << std::endl;
     std::ofstream file(filename, std::ios::out | std::ios::binary);

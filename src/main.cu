@@ -1,6 +1,8 @@
 #include "./core/headers.h"
 // ŞÜKRÜ ÇİRİŞ 2024
 
+using namespace SKR;
+
 int main()
 {
     std::vector<unsigned char> *encodedjpeg = jpegprocess::getInstance().readJPEG("./files/arm.jpg");
@@ -8,7 +10,7 @@ int main()
 
     int blockn = (decodedjpeg->width * decodedjpeg->height + 511) / 512;
     getHighContrast<<<blockn, 512>>>(decodedjpeg->image.channel[0], decodedjpeg->image.channel[1],
-                                decodedjpeg->image.channel[2], 2, decodedjpeg->width * decodedjpeg->height);
+                                     decodedjpeg->image.channel[2], 2, decodedjpeg->width * decodedjpeg->height);
 
     CHECK_CUDA(cudaDeviceSynchronize());
 
