@@ -19,8 +19,8 @@ SKR::jpegprocess &SKR::jpegprocess::getInstance()
 
 std::vector<unsigned char> *SKR::jpegprocess::readJPEG(const std::string &filename)
 {
+    MEASURE_TIME1;
     std::vector<unsigned char> *buffer = new std::vector<unsigned char>;
-    std::cout << "Reading " << filename << std::endl;
     std::ifstream file(filename, std::ios::in | std::ios::binary);
     if (!file)
     {
@@ -38,13 +38,13 @@ std::vector<unsigned char> *SKR::jpegprocess::readJPEG(const std::string &filena
         std::cout << "Failed to read the file: " << filename << std::endl;
         exit(-1);
     }
-
+    MEASURE_TIME2("readJPEG");
     return buffer;
 }
 
 SKR::jpegimage *SKR::jpegprocess::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer)
 {
-    std::cout << "Decoding" << std::endl;
+    MEASURE_TIME1;
     int nComponents;
     int widths[NVJPEG_MAX_COMPONENT];
     int heights[NVJPEG_MAX_COMPONENT];
@@ -72,7 +72,7 @@ SKR::jpegimage *SKR::jpegprocess::decodeJPEG(const std::vector<unsigned char> &j
     CHECK_NVJPEG(nvjpegDecode(handle, state, jpeg_buffer.data(), jpeg_buffer.size(), NVJPEG_OUTPUT_RGB, &output_image->image, stream));
 
     CHECK_CUDA(cudaStreamSynchronize(stream));
-
+    MEASURE_TIME2("decodeJPEG");
     return output_image;
 }
 
@@ -87,17 +87,19 @@ SKR::jpegprocess::~jpegprocess()
 
 void SKR::jpegprocess::freeJPEG(jpegimage *image)
 {
+    MEASURE_TIME1;
     for (int i = 0; i < NVJPEG_MAX_COMPONENT; i++)
     {
         CHECK_CUDA(cudaFree(image->image.channel[i]));
     }
 
     delete image;
+    MEASURE_TIME2("freeJPEG");
 }
 
 std::vector<unsigned char> *SKR::jpegprocess::encodeJPEG(const jpegimage *image, const int quality, const bool isgray)
 {
-    std::cout << "Encoding" << std::endl;
+    MEASURE_TIME1;
     if (isgray)
     {
         CHECK_NVJPEG(nvjpegEncoderParamsSetSamplingFactors(enc_params, NVJPEG_CSS_GRAY, stream));
@@ -124,13 +126,13 @@ std::vector<unsigned char> *SKR::jpegprocess::encodeJPEG(const jpegimage *image,
     CHECK_NVJPEG(nvjpegEncodeRetrieveBitstream(handle, enc_state, encoded->data(), &length, stream));
 
     CHECK_CUDA(cudaStreamSynchronize(stream));
-
+    MEASURE_TIME2("encodeJPEG");
     return encoded;
 }
 
 void SKR::jpegprocess::writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer)
 {
-    std::cout << "Writing " << filename << std::endl;
+    MEASURE_TIME1;
     std::ofstream file(filename, std::ios::out | std::ios::binary);
     if (!file)
     {
@@ -144,4 +146,5 @@ void SKR::jpegprocess::writeJPEG(const std::string &filename, const std::vector<
         exit(-1);
     }
     file.close();
+    MEASURE_TIME2("writeJPEG");
 }
