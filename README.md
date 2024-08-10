@@ -3,9 +3,10 @@ Windows:
 ```
 mkdir build
 cd build
-cmake ..
-msbuild compvis.sln /p:Configuration=Release /p:Platform=x64
+cmake .. 
+(cmake .. -DCMAKE_BUILD_TYPE=DEBUG)
+msbuild compvis.sln /p:Configuration=Release /p:Platform=x64 
+(msbuild compvis.sln /p:Configuration=Debug /p:Platform=x64)
 ```
 
-ŞÜKRÜ ÇİRİŞ 2024
-sukruciris.github.io
+[ŞÜKRÜ ÇİRİŞ 2024](https://sukruciris.github.io)

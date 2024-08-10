@@ -39,9 +39,18 @@
 
 #define MIRROR(a, center, low, high) ((center) + (a)) < (low) ? ((center) - (a)) : (((center) + (a)) > (high) ? ((center) - (a)) : ((center) + (a)))
 
+#if (DEBUG)
+
 #define MEASURE_TIME1 auto start_time = std::chrono::high_resolution_clock::now();
 
 #define MEASURE_TIME2(name)                                                                        \
     auto stop_time = std::chrono::high_resolution_clock::now();                                    \
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_time - start_time); \
     std::cout << (name) << " took " << duration.count() << " microseconds" << std::endl;
+
+#else
+
+#define MEASURE_TIME1
+#define MEASURE_TIME2(name)
+
+#endif

@@ -19,6 +19,8 @@ namespace SKR
 
         __global__ void getSmooth(unsigned char *r_in, unsigned char *g_in, unsigned char *b_in, int width, int height,
                                   unsigned char *r_out, unsigned char *g_out, unsigned char *b_out);
+
+        __global__ void getGray(unsigned char *r_in, unsigned char *g_in, unsigned char *b_in, unsigned int count);
     };
 
     class imageprocess
@@ -52,5 +54,8 @@ namespace SKR
 
         // image will be smoothed by a 5x5 kernel
         void getSmooth(jpegimage *img);
+
+        // image will be grayscale
+        void getGray(jpegimage *img);
     };
 };
