@@ -96,6 +96,26 @@ __device__ void runkernel5x5(unsigned char *r_in, unsigned char *g_in, unsigned 
     b_out[tindex] = SET_UCHAR(sumb);
 }
 
+__device__ void runkernel5x5Sobel(unsigned char *in, float *out, int width, int height, float kernel[25], unsigned int tindex)
+{
+    unsigned int column = GET_MCOLUMN(tindex, width);
+    unsigned int row = GET_MROW(tindex, width);
+    unsigned int maxcolumn = width - 1, maxrow = height - 1;
+    unsigned int kernelcenter = 2;
+    unsigned int kernelcolumn = 0, kernelrow = 0, mindex = 0;
+    int coldiff = 0, rowdiff = 0;
+    out[tindex] = 0;
+    for (int i = 0; i < 25; i++)
+    {
+        kernelcolumn = GET_MCOLUMN(i, 5);
+        kernelrow = GET_MROW(i, 5);
+        coldiff = kernelcolumn - kernelcenter;
+        rowdiff = kernelrow - kernelcenter;
+        mindex = GET_MINDEX(MIRROR(rowdiff, row, 0U, maxrow), MIRROR(coldiff, column, 0U, maxcolumn), width);
+        out[tindex] += (in[mindex] * kernel[i]);
+    }
+}
+
 __constant__ float smooth_kernel[25] = {
     0.04f, 0.04f, 0.04f, 0.04f, 0.04f, //
     0.04f, 0.04f, 0.04f, 0.04f, 0.04f, //
@@ -126,6 +146,26 @@ __global__ void SKR::kernels::getSmooth(unsigned char *r_in, unsigned char *g_in
     if (tindex < width * height)
     {
         runkernel5x5(r_in, g_in, b_in, width, height, smooth_kernel, tindex, r_out, g_out, b_out);
+    }
+}
+
+__global__ void SKR::kernels::getSobel(unsigned char *in, int width, int height, float *sobelxout, float *sobelyout)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < width * height)
+    {
+        runkernel5x5Sobel(in, sobelxout, width, height, sobelx_kernel, tindex);
+        runkernel5x5Sobel(in, sobelyout, width, height, sobely_kernel, tindex);
+    }
+}
+
+__global__ void SKR::kernels::getMagNorm(float *sobelxin, float *sobelyin, int width, int height, unsigned char *out)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < width * height)
+    {
+        float mag;
+        mag = sqrtf(sobelxin[tindex] * sobelxin[tindex] + sobelyin[tindex] * sobelyin[tindex]);
     }
 }
 

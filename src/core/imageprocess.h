@@ -21,6 +21,10 @@ namespace SKR
                                   unsigned char *r_out, unsigned char *g_out, unsigned char *b_out);
 
         __global__ void getGray(unsigned char *r_in, unsigned char *g_in, unsigned char *b_in, unsigned int count);
+
+        __global__ void getSobel(unsigned char *in, int width, int height, float *sobelxout, float *sobelyout);
+
+        __global__ void getMagNorm(float *sobelxin, float *sobelyin, int width, int height, unsigned char *out);
     };
 
     class imageprocess
