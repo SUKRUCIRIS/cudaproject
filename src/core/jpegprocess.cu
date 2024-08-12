@@ -1,5 +1,5 @@
-#include "jpegprocess.h"
-#include "utility.h"
+#include "jpegprocess.cuh"
+#include "utility.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
 SKR::jpegprocess::jpegprocess(void)

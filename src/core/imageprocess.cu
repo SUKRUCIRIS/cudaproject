@@ -1,5 +1,5 @@
-#include "imageprocess.h"
-#include "utility.h"
+#include "imageprocess.cuh"
+#include "utility.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
 __global__ void SKR::kernels::getNegative(unsigned char *r_in, unsigned char *g_in, unsigned char *b_in, unsigned int count)

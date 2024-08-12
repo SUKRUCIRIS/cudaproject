@@ -1,4 +1,4 @@
-#include "./core/headers.h"
+#include "./core/headers.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
 using namespace SKR;

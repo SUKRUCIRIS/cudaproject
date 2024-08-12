@@ -1,5 +1,5 @@
 #pragma once
-#include "jpegprocess.h"
+#include "jpegprocess.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
 namespace SKR
