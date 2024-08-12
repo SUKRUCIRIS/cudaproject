@@ -39,6 +39,8 @@
 
 #define MIRROR(a, center, low, high) ((center) + (a)) < (low) ? ((center) - (a)) : (((center) + (a)) > (high) ? ((center) - (a)) : ((center) + (a)))
 
+#define NORM(v, minv, maxv) (((v) - (minv)) / ((maxv) - (minv)))
+
 #if (DEBUG)
 
 #define MEASURE_TIME1 auto start_time = std::chrono::high_resolution_clock::now();

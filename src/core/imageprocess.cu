@@ -104,7 +104,7 @@ __device__ void runkernel5x5Sobel(unsigned char *in, float *out, int width, int 
     unsigned int kernelcenter = 2;
     unsigned int kernelcolumn = 0, kernelrow = 0, mindex = 0;
     int coldiff = 0, rowdiff = 0;
-    out[tindex] = 0;
+    (*out) = 0;
     for (int i = 0; i < 25; i++)
     {
         kernelcolumn = GET_MCOLUMN(i, 5);
@@ -112,7 +112,7 @@ __device__ void runkernel5x5Sobel(unsigned char *in, float *out, int width, int 
         coldiff = kernelcolumn - kernelcenter;
         rowdiff = kernelrow - kernelcenter;
         mindex = GET_MINDEX(MIRROR(rowdiff, row, 0U, maxrow), MIRROR(coldiff, column, 0U, maxcolumn), width);
-        out[tindex] += (in[mindex] * kernel[i]);
+        (*out) += (in[mindex] * kernel[i]);
     }
 }
 
@@ -149,23 +149,86 @@ __global__ void SKR::kernels::getSmooth(unsigned char *r_in, unsigned char *g_in
     }
 }
 
-__global__ void SKR::kernels::getSobel(unsigned char *in, int width, int height, float *sobelxout, float *sobelyout)
+__global__ void SKR::kernels::getSobel(unsigned char *in, int width, int height, float *sobelmag)
 {
     unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
     if (tindex < width * height)
     {
-        runkernel5x5Sobel(in, sobelxout, width, height, sobelx_kernel, tindex);
-        runkernel5x5Sobel(in, sobelyout, width, height, sobely_kernel, tindex);
+        float sobelx, sobely;
+        runkernel5x5Sobel(in, &sobelx, width, height, sobelx_kernel, tindex);
+        runkernel5x5Sobel(in, &sobely, width, height, sobely_kernel, tindex);
+        sobelmag[tindex] = sqrtf(sobelx * sobelx + sobely * sobely);
     }
 }
 
-__global__ void SKR::kernels::getMagNorm(float *sobelxin, float *sobelyin, int width, int height, unsigned char *out)
+__global__ void SKR::kernels::getMax(float *data, float *maxv, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    __shared__ float sdata[MAX_CUDA_THREADS_PER_BLOCK];
+    if (tindex < count)
+    {
+        sdata[threadIdx.x] = data[tindex];
+        __syncthreads();
+
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+        {
+            if (threadIdx.x < stride)
+            {
+                float lhs = sdata[threadIdx.x];
+                float rhs = sdata[threadIdx.x + stride];
+                sdata[threadIdx.x] = MAX(lhs, rhs);
+            }
+            __syncthreads();
+        }
+    }
+    if (tindex == 0)
+    {
+        *maxv = sdata[0];
+    }
+}
+
+__global__ void SKR::kernels::getMin(float *data, float *minv, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    __shared__ float sdata[MAX_CUDA_THREADS_PER_BLOCK];
+    if (tindex < count)
+    {
+        sdata[threadIdx.x] = data[tindex];
+        __syncthreads();
+
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+        {
+            if (threadIdx.x < stride)
+            {
+                float lhs = sdata[threadIdx.x];
+                float rhs = sdata[threadIdx.x + stride];
+                sdata[threadIdx.x] = MIN(lhs, rhs);
+            }
+            __syncthreads();
+        }
+    }
+    if (tindex == 0)
+    {
+        *minv = sdata[0];
+    }
+}
+
+__global__ void SKR::kernels::getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out)
 {
     unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
     if (tindex < width * height)
     {
-        float mag;
-        mag = sqrtf(sobelxin[tindex] * sobelxin[tindex] + sobelyin[tindex] * sobelyin[tindex]);
+        float norm;
+        norm = NORM(sobelmag[tindex], *minv, *maxv) * 255;
+        out[tindex] = SET_UCHAR(norm);
+        if (out[tindex] >= threshold)
+        {
+            out[tindex] = 255;
+        }
+        else
+        {
+            out[tindex] = 0;
+        }
     }
 }
 
@@ -188,8 +251,8 @@ SKR::imageprocess &SKR::imageprocess::getInstance()
 void SKR::imageprocess::getNegative(jpegimage *img)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getNegative<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getNegative<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getNegative");
 }
@@ -197,8 +260,8 @@ void SKR::imageprocess::getNegative(jpegimage *img)
 void SKR::imageprocess::getLighter(jpegimage *img, unsigned char value)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getLighter<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getLighter<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getLighter");
 }
@@ -206,8 +269,8 @@ void SKR::imageprocess::getLighter(jpegimage *img, unsigned char value)
 void SKR::imageprocess::getDarker(jpegimage *img, unsigned char value)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getDarker<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getDarker<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getDarker");
 }
@@ -215,8 +278,8 @@ void SKR::imageprocess::getDarker(jpegimage *img, unsigned char value)
 void SKR::imageprocess::getLowContrast(jpegimage *img, int value)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getLowContrast<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getLowContrast<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getLowContrast");
 }
@@ -224,8 +287,8 @@ void SKR::imageprocess::getLowContrast(jpegimage *img, int value)
 void SKR::imageprocess::getHighContrast(jpegimage *img, int value)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getHighContrast<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getHighContrast<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], value, img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getHighContrast");
 }
@@ -234,15 +297,15 @@ void SKR::imageprocess::getSmooth(jpegimage *img)
 {
     MEASURE_TIME1;
     unsigned char *r_out = 0, *g_out = 0, *b_out = 0;
-    cudaMalloc(&r_out, img->width * img->height);
-    cudaMalloc(&g_out, img->width * img->height);
-    cudaMalloc(&b_out, img->width * img->height);
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getSmooth<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width, img->height, r_out, g_out, b_out);
+    CHECK_CUDA(cudaMalloc(&r_out, img->width * img->height));
+    CHECK_CUDA(cudaMalloc(&g_out, img->width * img->height));
+    CHECK_CUDA(cudaMalloc(&b_out, img->width * img->height));
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getSmooth<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width, img->height, r_out, g_out, b_out);
     CHECK_CUDA(cudaStreamSynchronize(stream));
-    cudaFree(img->image.channel[0]);
-    cudaFree(img->image.channel[1]);
-    cudaFree(img->image.channel[2]);
+    CHECK_CUDA(cudaFree(img->image.channel[0]));
+    CHECK_CUDA(cudaFree(img->image.channel[1]));
+    CHECK_CUDA(cudaFree(img->image.channel[2]));
     img->image.channel[0] = r_out;
     img->image.channel[1] = g_out;
     img->image.channel[2] = b_out;
@@ -252,8 +315,31 @@ void SKR::imageprocess::getSmooth(jpegimage *img)
 void SKR::imageprocess::getGray(jpegimage *img)
 {
     MEASURE_TIME1;
-    int blockn = (img->width * img->height + 511) / 512;
-    SKR::kernels::getGray<<<blockn, 512, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width * img->height);
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getGray<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->image.channel[1], img->image.channel[2], img->width * img->height);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     MEASURE_TIME2("getGray");
+}
+
+void SKR::imageprocess::getSobelEdges(jpegimage *img, unsigned char threshold)
+{
+    MEASURE_TIME1;
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    float *sobelmag, *minv, *maxv;
+    CHECK_CUDA(cudaMalloc(&sobelmag, sizeof(float) * img->width * img->height));
+    CHECK_CUDA(cudaMalloc(&minv, sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&maxv, sizeof(float)));
+    SKR::kernels::getSobel<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], img->width, img->height, sobelmag);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    SKR::kernels::getMin<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sobelmag, minv, img->width * img->height);
+    SKR::kernels::getMax<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sobelmag, maxv, img->width * img->height);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    SKR::kernels::getSobelEdges<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sobelmag, minv, maxv, img->width, img->height, threshold, img->image.channel[0]);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    cudaMemcpy(img->image.channel[1], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(img->image.channel[2], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice);
+    CHECK_CUDA(cudaFree(sobelmag));
+    CHECK_CUDA(cudaFree(minv));
+    CHECK_CUDA(cudaFree(maxv));
+    MEASURE_TIME2("getSobelEdges");
 }
