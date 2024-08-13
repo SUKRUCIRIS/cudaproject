@@ -1,5 +1,5 @@
 #pragma once
-#include "jpegprocess.cuh"
+#include "jpegde.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
 namespace SKR
@@ -48,27 +48,27 @@ namespace SKR
         static imageprocess &getInstance();
 
         // every pixel will be substracted from 255
-        void getNegative(jpegimage *img);
+        void getNegative(Image *img);
 
         // value will be added to every pixel
-        void getLighter(jpegimage *img, unsigned char value);
+        void getLighter(Image *img, unsigned char value);
 
         // value will be substracted from every pixel
-        void getDarker(jpegimage *img, unsigned char value);
+        void getDarker(Image *img, unsigned char value);
 
         // value will be divided by every pixel
-        void getLowContrast(jpegimage *img, int value);
+        void getLowContrast(Image *img, int value);
 
         // value will be muliplied by every pixel
-        void getHighContrast(jpegimage *img, int value);
+        void getHighContrast(Image *img, int value);
 
         // image will be smoothed by a 5x5 kernel
-        void getSmooth(jpegimage *img);
+        void getSmooth(Image *img);
 
         // image will be grayscale
-        void getGray(jpegimage *img);
+        void getGray(Image *img);
 
         // finds edges in image. image must be grayscale
-        void getSobelEdges(jpegimage *img, unsigned char threshold);
+        void getSobelEdges(Image *img, unsigned char threshold);
     };
 };

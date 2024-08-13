@@ -1,8 +1,8 @@
-#include "jpegprocess.cuh"
+#include "jpegde.cuh"
 #include "utility.cuh"
 // ŞÜKRÜ ÇİRİŞ 2024
 
-SKR::jpegprocess::jpegprocess(void)
+SKR::jpegde::jpegde(void)
 {
     CHECK_NVJPEG(nvjpegCreateSimple(&handle))
     CHECK_NVJPEG(nvjpegJpegStateCreate(handle, &state))
@@ -11,13 +11,13 @@ SKR::jpegprocess::jpegprocess(void)
     CHECK_NVJPEG(nvjpegEncoderParamsCreate(handle, &enc_params, stream));
 }
 
-SKR::jpegprocess &SKR::jpegprocess::getInstance()
+SKR::jpegde &SKR::jpegde::getInstance()
 {
-    static jpegprocess ins;
+    static jpegde ins;
     return ins;
 }
 
-std::vector<unsigned char> *SKR::jpegprocess::readJPEG(const std::string &filename)
+std::vector<unsigned char> *SKR::jpegde::readJPEG(const std::string &filename)
 {
     MEASURE_TIME1;
     std::vector<unsigned char> *buffer = new std::vector<unsigned char>;
@@ -42,14 +42,14 @@ std::vector<unsigned char> *SKR::jpegprocess::readJPEG(const std::string &filena
     return buffer;
 }
 
-SKR::jpegimage *SKR::jpegprocess::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer)
+SKR::Image *SKR::jpegde::decodeJPEG(const std::vector<unsigned char> &jpeg_buffer)
 {
     MEASURE_TIME1;
     int nComponents;
     int widths[NVJPEG_MAX_COMPONENT];
     int heights[NVJPEG_MAX_COMPONENT];
 
-    jpegimage *output_image = new jpegimage;
+    Image *output_image = new Image;
 
     nvjpegChromaSubsampling_t subsampling;
 
@@ -76,7 +76,7 @@ SKR::jpegimage *SKR::jpegprocess::decodeJPEG(const std::vector<unsigned char> &j
     return output_image;
 }
 
-SKR::jpegprocess::~jpegprocess()
+SKR::jpegde::~jpegde()
 {
     CHECK_NVJPEG(nvjpegEncoderParamsDestroy(enc_params));
     CHECK_NVJPEG(nvjpegEncoderStateDestroy(enc_state));
@@ -85,7 +85,7 @@ SKR::jpegprocess::~jpegprocess()
     CHECK_CUDA(cudaStreamDestroy(stream));
 }
 
-void SKR::jpegprocess::freeJPEG(jpegimage *image)
+void SKR::jpegde::freeJPEG(Image *image)
 {
     MEASURE_TIME1;
     for (int i = 0; i < NVJPEG_MAX_COMPONENT; i++)
@@ -97,7 +97,7 @@ void SKR::jpegprocess::freeJPEG(jpegimage *image)
     MEASURE_TIME2("freeJPEG");
 }
 
-std::vector<unsigned char> *SKR::jpegprocess::encodeJPEG(const jpegimage *image, const int quality, const bool isgray)
+std::vector<unsigned char> *SKR::jpegde::encodeJPEG(const Image *image, const int quality, const bool isgray)
 {
     MEASURE_TIME1;
     if (isgray)
@@ -130,7 +130,7 @@ std::vector<unsigned char> *SKR::jpegprocess::encodeJPEG(const jpegimage *image,
     return encoded;
 }
 
-void SKR::jpegprocess::writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer)
+void SKR::jpegde::writeJPEG(const std::string &filename, const std::vector<unsigned char> &jpeg_buffer)
 {
     MEASURE_TIME1;
     std::ofstream file(filename, std::ios::out | std::ios::binary);

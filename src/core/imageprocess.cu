@@ -248,7 +248,7 @@ SKR::imageprocess &SKR::imageprocess::getInstance()
     return ins;
 }
 
-void SKR::imageprocess::getNegative(jpegimage *img)
+void SKR::imageprocess::getNegative(Image *img)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -257,7 +257,7 @@ void SKR::imageprocess::getNegative(jpegimage *img)
     MEASURE_TIME2("getNegative");
 }
 
-void SKR::imageprocess::getLighter(jpegimage *img, unsigned char value)
+void SKR::imageprocess::getLighter(Image *img, unsigned char value)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -266,7 +266,7 @@ void SKR::imageprocess::getLighter(jpegimage *img, unsigned char value)
     MEASURE_TIME2("getLighter");
 }
 
-void SKR::imageprocess::getDarker(jpegimage *img, unsigned char value)
+void SKR::imageprocess::getDarker(Image *img, unsigned char value)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -275,7 +275,7 @@ void SKR::imageprocess::getDarker(jpegimage *img, unsigned char value)
     MEASURE_TIME2("getDarker");
 }
 
-void SKR::imageprocess::getLowContrast(jpegimage *img, int value)
+void SKR::imageprocess::getLowContrast(Image *img, int value)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -284,7 +284,7 @@ void SKR::imageprocess::getLowContrast(jpegimage *img, int value)
     MEASURE_TIME2("getLowContrast");
 }
 
-void SKR::imageprocess::getHighContrast(jpegimage *img, int value)
+void SKR::imageprocess::getHighContrast(Image *img, int value)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -293,7 +293,7 @@ void SKR::imageprocess::getHighContrast(jpegimage *img, int value)
     MEASURE_TIME2("getHighContrast");
 }
 
-void SKR::imageprocess::getSmooth(jpegimage *img)
+void SKR::imageprocess::getSmooth(Image *img)
 {
     MEASURE_TIME1;
     unsigned char *r_out = 0, *g_out = 0, *b_out = 0;
@@ -312,7 +312,7 @@ void SKR::imageprocess::getSmooth(jpegimage *img)
     MEASURE_TIME2("getSmooth");
 }
 
-void SKR::imageprocess::getGray(jpegimage *img)
+void SKR::imageprocess::getGray(Image *img)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -321,7 +321,7 @@ void SKR::imageprocess::getGray(jpegimage *img)
     MEASURE_TIME2("getGray");
 }
 
-void SKR::imageprocess::getSobelEdges(jpegimage *img, unsigned char threshold)
+void SKR::imageprocess::getSobelEdges(Image *img, unsigned char threshold)
 {
     MEASURE_TIME1;
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
