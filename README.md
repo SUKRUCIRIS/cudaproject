@@ -1,5 +1,10 @@
-Windows:
-(instal cmake and vs community 2022. add msbuild to path.)
+I used CUDA toolkit v12.6 and Nvidia video codec sdk v12.2.
+Video sdk is in the third_party folder, it isn't included in the cuda toolkit v12.6.
+
+# Windows:
+
+Instal Cmake and VS Community 2022. Add MSBuild to path.
+
 ```
 mkdir build
 cd build

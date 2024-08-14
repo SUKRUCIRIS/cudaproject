@@ -15,7 +15,8 @@ if (WIN32)
 
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /NODEFAULTLIB:LIBCMT")
-
+	find_library(nvcuvid_LIBRARY nvcuvid PATHS ${CMAKE_SOURCE_DIR}/third_party/nvideo/Lib/x64/)
+	find_library(nvencodeapi_LIBRARY nvencodeapi PATHS ${CMAKE_SOURCE_DIR}/third_party/nvideo/Lib/x64/)
 endif()
 
 set(INTERPROCEDURAL_OPTIMIZATION ON)
@@ -35,4 +36,5 @@ add_executable(compvis ${src_files})
 set_target_properties(compvis PROPERTIES CUDA_ARCHITECTURES native)
 
 find_library(NVJPEG_LIBRARY nvjpeg PATHS ${CUDA_TOOLKIT_ROOT_DIR}/lib/x64)
-target_link_libraries(compvis ${NVJPEG_LIBRARY})
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(compvis ${NVJPEG_LIBRARY} ${nvcuvid_LIBRARY} ${nvencodeapi_LIBRARY} CUDA::cudart CUDA::cuda_driver)

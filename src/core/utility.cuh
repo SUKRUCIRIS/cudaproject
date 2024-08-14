@@ -2,6 +2,8 @@
 // ŞÜKRÜ ÇİRİŞ 2024
 #include <iostream>
 #include <chrono>
+#include <cuda.h>
+#include <nvjpeg.h>
 
 #define CHECK_CUDA(call)                                                                                          \
     {                                                                                                             \
@@ -21,6 +23,16 @@
             std::cout << "NVJPEG failure: '#" << _e << "' at " << __FILE__ << ":" << __LINE__ << std::endl; \
             exit(-1);                                                                                       \
         }                                                                                                   \
+    }
+
+#define CHECK_NVDEC(call)                                                                                  \
+    {                                                                                                      \
+        CUresult _e = (call);                                                                              \
+        if (_e != CUDA_SUCCESS)                                                                            \
+        {                                                                                                  \
+            std::cout << "NVDEC failure: '#" << _e << "' at " << __FILE__ << ":" << __LINE__ << std::endl; \
+            exit(-1);                                                                                      \
+        }                                                                                                  \
     }
 
 #define SET_UCHAR(value) ((value) >= 255 ? 255 : ((value) <= 0 ? 0 : (unsigned char)(value)))
