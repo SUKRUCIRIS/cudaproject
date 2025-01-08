@@ -10,7 +10,7 @@ int main()
 
     imageprocess::getInstance().getGray(decodedjpeg);
 
-    imageprocess::getInstance().getSobelEdges(decodedjpeg, 90);
+    imageprocess::getInstance().getSobelEdges(decodedjpeg, 70);
 
     std::vector<unsigned char> *outputjpeg = jpegde::getInstance().encodeJPEG(decodedjpeg, 50, false);
     jpegde::getInstance().writeJPEG("./out.jpg", *outputjpeg);

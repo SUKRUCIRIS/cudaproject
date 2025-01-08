@@ -75,10 +75,22 @@ namespace SKR
         // finds edges in image. image must be grayscale
         void getSobelEdges(Image *img, unsigned char threshold);
 
-        //get sum of the all pixel values
-        float getSumGray(Image *img);
+        // get sum of the all pixel values
+        float getSum(Image *img);
 
-        //get sum of the all pixel values, img array must be on device
-        float getSumGray(unsigned char *img, unsigned int count);
+        // get sum of the all unsigned char values, unsigned char array must be on device
+        float getSum(unsigned char *img, unsigned int count);
+
+        // get sum of the all float values, float array must be on device
+        float getSum(float *img, unsigned int count);
+
+        // get minimum of all values
+        float getMin(float *img, unsigned int count);
+
+        // get maximum of all values
+        float getMax(float *img, unsigned int count);
+
+        // get mean of all pixel values
+        float getMean(Image *img);
     };
 };
