@@ -213,6 +213,66 @@ __global__ void SKR::kernels::getMin(float *data, float *minv, unsigned int coun
     }
 }
 
+__global__ void SKR::kernels::getSum(unsigned char *data, float *sum, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    __shared__ float sdata[MAX_CUDA_THREADS_PER_BLOCK];
+    if (tindex >= count)
+    {
+        sdata[threadIdx.x] = 0;
+    }
+    if (tindex < count)
+    {
+        sdata[threadIdx.x] = data[tindex];
+        __syncthreads();
+
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+        {
+            if (threadIdx.x < stride)
+            {
+                float lhs = sdata[threadIdx.x];
+                float rhs = sdata[threadIdx.x + stride];
+                sdata[threadIdx.x] = lhs + rhs;
+            }
+            __syncthreads();
+        }
+    }
+    if (threadIdx.x == 0)
+    {
+        sum[blockIdx.x] = sdata[0];
+    }
+}
+
+__global__ void SKR::kernels::getSumFloat(float *data, float *sum, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    __shared__ float sdata[MAX_CUDA_THREADS_PER_BLOCK];
+    if (tindex >= count)
+    {
+        sdata[threadIdx.x] = 0;
+    }
+    if (tindex < count)
+    {
+        sdata[threadIdx.x] = data[tindex];
+        __syncthreads();
+
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+        {
+            if (threadIdx.x < stride)
+            {
+                float lhs = sdata[threadIdx.x];
+                float rhs = sdata[threadIdx.x + stride];
+                sdata[threadIdx.x] = lhs + rhs;
+            }
+            __syncthreads();
+        }
+    }
+    if (threadIdx.x == 0)
+    {
+        sum[blockIdx.x] = sdata[0];
+    }
+}
+
 __global__ void SKR::kernels::getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out)
 {
     unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
@@ -336,10 +396,65 @@ void SKR::imageprocess::getSobelEdges(Image *img, unsigned char threshold)
     CHECK_CUDA(cudaStreamSynchronize(stream));
     SKR::kernels::getSobelEdges<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sobelmag, minv, maxv, img->width, img->height, threshold, img->image.channel[0]);
     CHECK_CUDA(cudaStreamSynchronize(stream));
-    cudaMemcpy(img->image.channel[1], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice);
-    cudaMemcpy(img->image.channel[2], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice);
+    CHECK_CUDA(cudaMemcpy(img->image.channel[1], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice));
+    CHECK_CUDA(cudaMemcpy(img->image.channel[2], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice));
     CHECK_CUDA(cudaFree(sobelmag));
     CHECK_CUDA(cudaFree(minv));
     CHECK_CUDA(cudaFree(maxv));
     MEASURE_TIME2("getSobelEdges");
+}
+
+float SKR::imageprocess::getSumGray(Image *img)
+{
+    return getSumGray(img->image.channel[0], img->width * img->height);
+}
+
+float SKR::imageprocess::getSumGray(unsigned char *img, unsigned int count)
+{
+    MEASURE_TIME1;
+    float res = 0;
+    int blockn = (count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    float *result = 0;
+    CHECK_CUDA(cudaMalloc(&result, sizeof(float) * blockn));
+    SKR::kernels::getSum<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img, result, count);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    // add recursively block results
+    float *result2 = 0;
+    if (blockn > 1)
+    {
+        CHECK_CUDA(cudaMalloc(&result2, sizeof(float) * blockn));
+    }
+    else
+    {
+        CHECK_CUDA(cudaMemcpy(&res, result, sizeof(float), cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaFree(result));
+        MEASURE_TIME2("getSumGray");
+        return res;
+    }
+    int before_blockn = blockn;
+    blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    while (1)
+    {
+        SKR::kernels::getSumFloat<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(result, result2, before_blockn);
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        CHECK_CUDA(cudaMemcpy(result, result2, sizeof(float) * blockn, cudaMemcpyDeviceToDevice));
+        if (blockn == 1)
+        {
+            CHECK_CUDA(cudaMemcpy(&res, result2, sizeof(float), cudaMemcpyDeviceToHost));
+            break;
+        }
+        before_blockn = blockn;
+        if (blockn <= MAX_CUDA_THREADS_PER_BLOCK)
+        {
+            blockn = 1;
+        }
+        else
+        {
+            blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+        }
+    }
+    CHECK_CUDA(cudaFree(result));
+    CHECK_CUDA(cudaFree(result2));
+    MEASURE_TIME2("getSumGray");
+    return res;
 }

@@ -4,7 +4,7 @@
 
 namespace SKR
 {
-    constexpr int MAX_CUDA_THREADS_PER_BLOCK = 512; // Nvidia GPUs can have 256, 512 or 1024 thread per block
+    constexpr int MAX_CUDA_THREADS_PER_BLOCK = 1024; // Nvidia GPUs can have 256, 512 or 1024 thread per block
 
     // user shouldn't access this namespace
     namespace kernels
@@ -29,6 +29,10 @@ namespace SKR
         __global__ void getMax(float *data, float *maxv, unsigned int count);
 
         __global__ void getMin(float *data, float *minv, unsigned int count);
+
+        __global__ void getSum(unsigned char *data, float *sum, unsigned int count);
+
+        __global__ void getSumFloat(float *data, float *sum, unsigned int count);
 
         __global__ void getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out);
     };
@@ -70,5 +74,11 @@ namespace SKR
 
         // finds edges in image. image must be grayscale
         void getSobelEdges(Image *img, unsigned char threshold);
+
+        //get sum of the all pixel values
+        float getSumGray(Image *img);
+
+        //get sum of the all pixel values, img array must be on device
+        float getSumGray(unsigned char *img, unsigned int count);
     };
 };
