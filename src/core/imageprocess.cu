@@ -704,10 +704,18 @@ std::vector<SKR::Image *> *SKR::imageprocess::splitSingleChannel(Image *img, int
     return res;
 }
 
-float SKR::imageprocess::getVariance(Image *img)
+float SKR::imageprocess::getVariance(Image *img, float *pre_mean)
 {
     MEASURE_TIME1;
-    float mean = getMean(img);
+    float mean = 0;
+    if (pre_mean == 0)
+    {
+        mean = getMean(img);
+    }
+    else
+    {
+        mean = *pre_mean;
+    }
     float *sd = 0;
     CHECK_CUDA(cudaMalloc(&sd, sizeof(float) * img->width * img->height));
     int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
@@ -719,12 +727,12 @@ float SKR::imageprocess::getVariance(Image *img)
     return res;
 }
 
-float SKR::imageprocess::getStandardDeviation(Image *img)
+float SKR::imageprocess::getStandardDeviation(Image *img, float *pre_mean)
 {
-    return sqrtf(getVariance(img));
+    return sqrtf(getVariance(img, pre_mean));
 }
 
-float SKR::imageprocess::getCovariance(Image *img1, Image *img2)
+float SKR::imageprocess::getCovariance(Image *img1, Image *img2, float *pre_mean1, float *pre_mean2)
 {
     if (img1->width != img2->width || img1->height != img2->height)
     {
@@ -732,8 +740,23 @@ float SKR::imageprocess::getCovariance(Image *img1, Image *img2)
         return 0;
     }
     MEASURE_TIME1;
-    float mean1 = getMean(img1);
-    float mean2 = getMean(img2);
+    float mean1 = 0, mean2 = 0;
+    if (pre_mean1 == 0)
+    {
+        mean1 = getMean(img1);
+    }
+    else
+    {
+        mean1 = *pre_mean1;
+    }
+    if (pre_mean2 == 0)
+    {
+        mean2 = getMean(img2);
+    }
+    else
+    {
+        mean2 = *pre_mean2;
+    }
     float *sd1 = 0, *sd2 = 0;
     CHECK_CUDA(cudaMalloc(&sd1, sizeof(float) * img1->width * img1->height));
     CHECK_CUDA(cudaMalloc(&sd2, sizeof(float) * img2->width * img2->height));
@@ -753,7 +776,7 @@ float SKR::imageprocess::getCovariance(Image *img1, Image *img2)
     return res;
 }
 
-float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, float L)
+float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, float L, float *pre_mean1, float *pre_mean2)
 {
     if (img1->width != img2->width || img1->height != img2->height)
     {
@@ -763,11 +786,26 @@ float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, f
     MEASURE_TIME1;
     float C1 = (K1 * L) * (K1 * L);
     float C2 = (K2 * L) * (K2 * L);
-    float mean1 = getMean(img1);
-    float mean2 = getMean(img2);
-    float variance1 = getVariance(img1);
-    float variance2 = getVariance(img2);
-    float covariance = getCovariance(img1, img2);
+    float mean1 = 0, mean2 = 0;
+    if (pre_mean1 == 0)
+    {
+        mean1 = getMean(img1);
+    }
+    else
+    {
+        mean1 = *pre_mean1;
+    }
+    if (pre_mean2 == 0)
+    {
+        mean2 = getMean(img2);
+    }
+    else
+    {
+        mean2 = *pre_mean2;
+    }
+    float variance1 = getVariance(img1, &mean1);
+    float variance2 = getVariance(img2, &mean2);
+    float covariance = getCovariance(img1, img2, &mean1, &mean2);
     float ssim = ((2 * mean1 * mean2 + C1) * (2 * covariance + C2)) / ((mean1 * mean1 + mean2 * mean2 + C1) * (variance1 + variance2 + C2));
     MEASURE_TIME2("getSSIM");
     return ssim;

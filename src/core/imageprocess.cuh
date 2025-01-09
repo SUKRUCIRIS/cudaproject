@@ -104,12 +104,15 @@ namespace SKR
         // split single channel image to multiple images
         std::vector<Image *> *splitSingleChannel(Image *img, int splitwidth, int splitheight);
 
-        float getVariance(Image *img);
+        // pre_mean is optional, if you have already calculated mean, you can pass it to the functions to avoid recalculation
 
-        float getStandardDeviation(Image *img);
+        float getVariance(Image *img, float *pre_mean = 0);
 
-        float getCovariance(Image *img1, Image *img2);
+        float getStandardDeviation(Image *img, float *pre_mean = 0);
 
-        float getSSIM(Image *img1, Image *img2, float K1 = 0.01F, float K2 = 0.03F, float L = 255.0F);
+        float getCovariance(Image *img1, Image *img2, float *pre_mean1 = 0, float *pre_mean2 = 0);
+
+        float getSSIM(Image *img1, Image *img2, float K1 = 0.01F, float K2 = 0.03F, float L = 255.0F,
+                      float *pre_mean1 = 0, float *pre_mean2 = 0);
     };
 };
