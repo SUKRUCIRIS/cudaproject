@@ -148,3 +148,40 @@ void SKR::jpegde::writeJPEG(const std::string &filename, const std::vector<unsig
     file.close();
     MEASURE_TIME2("writeJPEG");
 }
+
+SKR::Image *SKR::jpegde::createImage(unsigned char *r, unsigned char *g, unsigned char *b, int width, int height)
+{
+    MEASURE_TIME1;
+    Image *x = new Image;
+    x->width = width;
+    x->height = height;
+    x->image.channel[0] = r;
+    x->image.channel[1] = g;
+    x->image.channel[2] = b;
+    x->image.pitch[0] = width;
+    x->image.pitch[1] = width;
+    x->image.pitch[2] = width;
+    MEASURE_TIME2("createImage");
+    return x;
+}
+
+SKR::Image *SKR::jpegde::createImage(unsigned char *r, int width, int height)
+{
+    MEASURE_TIME1;
+    Image *x = new Image;
+    x->width = width;
+    x->height = height;
+    unsigned char *g = 0, *b = 0;
+    CHECK_CUDA(cudaMalloc(&g, sizeof(unsigned char) * width * height));
+    CHECK_CUDA(cudaMalloc(&b, sizeof(unsigned char) * width * height));
+    CHECK_CUDA(cudaMemcpy(g, r, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToDevice));
+    CHECK_CUDA(cudaMemcpy(b, r, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToDevice));
+    x->image.channel[0] = r;
+    x->image.channel[1] = g;
+    x->image.channel[2] = b;
+    x->image.pitch[0] = width;
+    x->image.pitch[1] = width;
+    x->image.pitch[2] = width;
+    MEASURE_TIME2("createImage");
+    return x;
+}

@@ -35,6 +35,8 @@ namespace SKR
         __global__ void getSumFloat(float *data, float *sum, unsigned int count);
 
         __global__ void getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out);
+
+        __global__ void splitSingleChannel(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight);
     };
 
     class imageprocess
@@ -92,5 +94,8 @@ namespace SKR
 
         // get mean of all pixel values
         float getMean(Image *img);
+
+        // split single channel image to multiple images
+        std::vector<Image *> *splitSingleChannel(Image *img, int splitwidth, int splitheight);
     };
 };

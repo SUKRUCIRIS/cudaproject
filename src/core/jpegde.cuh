@@ -40,6 +40,12 @@ namespace SKR
         // will return planar rgb channels which are allocated on GPU, width, height
         Image *decodeJPEG(const std::vector<unsigned char> &jpeg_buffer);
 
+        // r, g, b channels must be allocated on GPU
+        Image *createImage(unsigned char *r, unsigned char *g, unsigned char *b, int width, int height);
+
+        // single channel must be allocated on GPU
+        Image *createImage(unsigned char *r, int width, int height);
+
         // will return encoded jpeg data, quality must be between 1 and 100
         std::vector<unsigned char> *encodeJPEG(const Image *image, const int quality, const bool isgray);
 

@@ -300,6 +300,23 @@ __global__ void SKR::kernels::getSobelEdges(float *sobelmag, float *minv, float 
     }
 }
 
+__global__ void SKR::kernels::splitSingleChannel(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < width * height)
+    {
+        unsigned int column = GET_MCOLUMN(tindex, width);
+        unsigned int row = GET_MROW(tindex, width);
+        unsigned int splitcolumn = column / splitwidth;
+        unsigned int splitrow = row / splitheight;
+        unsigned int splitindex = GET_MINDEX(splitrow, splitcolumn, width / splitwidth);
+        unsigned int local_column = column % splitwidth;
+        unsigned int local_row = row % splitheight;
+        unsigned int local_index = GET_MINDEX(local_row, local_column, splitwidth);
+        out[splitindex][local_index] = in[tindex];
+    }
+}
+
 SKR::imageprocess::imageprocess()
 {
     CHECK_CUDA(cudaStreamCreate(&stream));
@@ -622,4 +639,40 @@ float SKR::imageprocess::getMax(float *img, unsigned int count)
 float SKR::imageprocess::getMean(Image *img)
 {
     return getSum(img) / (img->width * img->height);
+}
+
+std::vector<SKR::Image *> *SKR::imageprocess::splitSingleChannel(Image *img, int splitwidth, int splitheight)
+{
+    if (img->image.channel[0] == 0 || img->width % splitwidth != 0 || img->height % splitheight != 0 ||
+        splitwidth == 0 || splitheight == 0)
+    {
+        std::cout << "Invalid split parameters" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    std::vector<Image *> *res = new std::vector<Image *>();
+
+    int splitcount = (img->width / splitwidth) * (img->height / splitheight);
+    int splitsize = splitwidth * splitheight;
+    unsigned char **out = 0;
+    unsigned char **h_out = (unsigned char **)malloc(sizeof(unsigned char *) * splitcount);
+    for (int i = 0; i < splitcount; i++)
+    {
+        CHECK_CUDA(cudaMalloc(&(h_out[i]), sizeof(unsigned char) * splitsize));
+    }
+    CHECK_CUDA(cudaMalloc(&out, sizeof(unsigned char *) * splitcount));
+    CHECK_CUDA(cudaMemcpy(out, h_out, sizeof(unsigned char *) * splitcount, cudaMemcpyHostToDevice));
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::splitSingleChannel<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], out, img->width, img->height, splitwidth, splitheight);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    for (int i = 0; i < splitcount; i++)
+    {
+        Image *x = jpegde::getInstance().createImage(h_out[i], splitwidth, splitheight);
+        res->push_back(x);
+    }
+    CHECK_CUDA(cudaFree(out));
+    free(h_out);
+
+    MEASURE_TIME2("splitSingleChannel");
+    return res;
 }
