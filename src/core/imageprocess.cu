@@ -281,6 +281,34 @@ __global__ void SKR::kernels::getSumFloat(float *data, float *sum, unsigned int 
     }
 }
 
+__global__ void SKR::kernels::getMults(float *data1, float *data2, float *mults, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    if (tindex < count)
+    {
+        mults[tindex] = data1[tindex] * data2[tindex];
+    }
+}
+
+__global__ void SKR::kernels::getNonSquaredDeviations(unsigned char *data, float mean, float *nsd, unsigned int count)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < count)
+    {
+        nsd[tindex] = data[tindex] - mean;
+    }
+}
+
+__global__ void SKR::kernels::getSquaredDeviations(unsigned char *data, float mean, float *sd, unsigned int count)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < count)
+    {
+        float diff = data[tindex] - mean;
+        sd[tindex] = diff * diff;
+    }
+}
+
 __global__ void SKR::kernels::getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out)
 {
     unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
@@ -420,7 +448,6 @@ void SKR::imageprocess::getSobelEdges(Image *img, unsigned char threshold)
     float tmpmaxv = getMax(sobelmag, img->width * img->height);
     CHECK_CUDA(cudaMemcpy(minv, &tmpminv, sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(maxv, &tmpmaxv, sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaStreamSynchronize(stream));
     SKR::kernels::getSobelEdges<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sobelmag, minv, maxv, img->width, img->height, threshold, img->image.channel[0]);
     CHECK_CUDA(cudaStreamSynchronize(stream));
     CHECK_CUDA(cudaMemcpy(img->image.channel[1], img->image.channel[0], img->width * img->height, cudaMemcpyDeviceToDevice));
@@ -675,4 +702,73 @@ std::vector<SKR::Image *> *SKR::imageprocess::splitSingleChannel(Image *img, int
 
     MEASURE_TIME2("splitSingleChannel");
     return res;
+}
+
+float SKR::imageprocess::getVariance(Image *img)
+{
+    MEASURE_TIME1;
+    float mean = getMean(img);
+    float *sd = 0;
+    CHECK_CUDA(cudaMalloc(&sd, sizeof(float) * img->width * img->height));
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], mean, sd, img->width * img->height);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    float res = getSum(sd, img->width * img->height) / ((img->width * img->height) - 1);
+    CHECK_CUDA(cudaFree(sd));
+    MEASURE_TIME2("getVariance");
+    return res;
+}
+
+float SKR::imageprocess::getStandardDeviation(Image *img)
+{
+    return sqrtf(getVariance(img));
+}
+
+float SKR::imageprocess::getCovariance(Image *img1, Image *img2)
+{
+    if (img1->width != img2->width || img1->height != img2->height)
+    {
+        std::cout << "Images must have same dimensions for covariance" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    float mean1 = getMean(img1);
+    float mean2 = getMean(img2);
+    float *sd1 = 0, *sd2 = 0;
+    CHECK_CUDA(cudaMalloc(&sd1, sizeof(float) * img1->width * img1->height));
+    CHECK_CUDA(cudaMalloc(&sd2, sizeof(float) * img2->width * img2->height));
+    int blockn = (img1->width * img1->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getNonSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img1->image.channel[0], mean1, sd1, img1->width * img1->height);
+    SKR::kernels::getNonSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img2->image.channel[0], mean2, sd2, img2->width * img2->height);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    float *mults = 0;
+    CHECK_CUDA(cudaMalloc(&mults, sizeof(float) * img1->width * img1->height));
+    SKR::kernels::getMults<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sd1, sd2, mults, img1->width * img1->height);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    float res = getSum(mults, img1->width * img1->height) / (img1->width * img1->height - 1);
+    CHECK_CUDA(cudaFree(sd1));
+    CHECK_CUDA(cudaFree(sd2));
+    CHECK_CUDA(cudaFree(mults));
+    MEASURE_TIME2("getCovariance");
+    return res;
+}
+
+float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, float L)
+{
+    if (img1->width != img2->width || img1->height != img2->height)
+    {
+        std::cout << "Images must have same dimensions for SSIM" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    float C1 = (K1 * L) * (K1 * L);
+    float C2 = (K2 * L) * (K2 * L);
+    float mean1 = getMean(img1);
+    float mean2 = getMean(img2);
+    float variance1 = getVariance(img1);
+    float variance2 = getVariance(img2);
+    float covariance = getCovariance(img1, img2);
+    float ssim = ((2 * mean1 * mean2 + C1) * (2 * covariance + C2)) / ((mean1 * mean1 + mean2 * mean2 + C1) * (variance1 + variance2 + C2));
+    MEASURE_TIME2("getSSIM");
+    return ssim;
 }

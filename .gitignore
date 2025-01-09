@@ -2,5 +2,5 @@ build/
 .vscode/
 *.exe
 *.pdb
-*.jpg
-*.mp4
+/*.jpg
+/*.mp4
