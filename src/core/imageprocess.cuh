@@ -43,6 +43,8 @@ namespace SKR
         __global__ void getSobelEdges(float *sobelmag, float *minv, float *maxv, int width, int height, unsigned char threshold, unsigned char *out);
 
         __global__ void splitSingleChannel(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight);
+
+        __global__ void splitSingleChannelTemplate(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight);
     };
 
     class imageprocess
@@ -114,5 +116,11 @@ namespace SKR
 
         float getSSIM(Image *img1, Image *img2, float K1 = 0.01F, float K2 = 0.03F, float L = 255.0F,
                       float *pre_mean1 = 0, float *pre_mean2 = 0);
+
+        float getSSIMOneIsPreCalculated(Image *img1, Image *img2, float pre_mean2, float pre_variance2,
+                                        float K1 = 0.01F, float K2 = 0.03F, float L = 255.0F, float *pre_mean1 = 0);
+
+        // I was gonna use this function for template matching but it uses so much GPU memory so I decided to not use it
+        std::vector<Image *> *extractCandidatesForMatching(Image *img, int splitwidth, int splitheight);
     };
 };

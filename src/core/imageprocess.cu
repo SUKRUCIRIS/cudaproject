@@ -345,6 +345,29 @@ __global__ void SKR::kernels::splitSingleChannel(unsigned char *in, unsigned cha
     }
 }
 
+__global__ void SKR::kernels::splitSingleChannelTemplate(unsigned char *in, unsigned char **out, int width, int height, int templateWidth, int templateHeight)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < width * height)
+    {
+        unsigned int column = GET_MCOLUMN(tindex, width);
+        unsigned int row = GET_MROW(tindex, width);
+        int templateIndex = GET_MINDEX(row, column, width - templateWidth + 1);
+
+        if (column + templateWidth <= width && row + templateHeight <= height)
+        {
+            for (int i = 0; i < templateHeight; i++)
+            {
+                for (int j = 0; j < templateWidth; j++)
+                {
+                    unsigned int localIndex = GET_MINDEX(i, j, templateWidth);
+                    out[templateIndex][localIndex] = in[GET_MINDEX(row + i, column + j, width)];
+                }
+            }
+        }
+    }
+}
+
 SKR::imageprocess::imageprocess()
 {
     CHECK_CUDA(cudaStreamCreate(&stream));
@@ -806,7 +829,71 @@ float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, f
     float variance1 = getVariance(img1, &mean1);
     float variance2 = getVariance(img2, &mean2);
     float covariance = getCovariance(img1, img2, &mean1, &mean2);
-    float ssim = ((2 * mean1 * mean2 + C1) * (2 * covariance + C2)) / ((mean1 * mean1 + mean2 * mean2 + C1) * (variance1 + variance2 + C2));
+    float ssim = ((2 * mean1 * mean2 + C1) * (2 * covariance + C2)) /
+                 ((mean1 * mean1 + mean2 * mean2 + C1) * (variance1 + variance2 + C2));
     MEASURE_TIME2("getSSIM");
     return ssim;
+}
+
+float SKR::imageprocess::getSSIMOneIsPreCalculated(Image *img1, Image *img2, float pre_mean2, float pre_variance2,
+                                                   float K1, float K2, float L, float *pre_mean1)
+{
+    if (img1->width != img2->width || img1->height != img2->height)
+    {
+        std::cout << "Images must have same dimensions for SSIM" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    float C1 = (K1 * L) * (K1 * L);
+    float C2 = (K2 * L) * (K2 * L);
+    float mean1 = 0;
+    if (pre_mean1 == 0)
+    {
+        mean1 = getMean(img1);
+    }
+    else
+    {
+        mean1 = *pre_mean1;
+    }
+    float variance1 = getVariance(img1, &mean1);
+    float covariance = getCovariance(img1, img2, &mean1, &pre_mean2);
+    float ssim = ((2 * mean1 * pre_mean2 + C1) * (2 * covariance + C2)) /
+                 ((mean1 * mean1 + pre_mean2 * pre_mean2 + C1) * (variance1 + pre_variance2 + C2));
+    MEASURE_TIME2("getSSIM");
+    return ssim;
+}
+
+std::vector<SKR::Image *> *SKR::imageprocess::extractCandidatesForMatching(Image *img, int splitwidth, int splitheight)
+{
+    if (img->image.channel[0] == 0 || img->width < splitwidth || img->height < splitheight || splitwidth == 0 || splitheight == 0)
+    {
+        std::cout << "Invalid split parameters" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    std::vector<Image *> *res = new std::vector<Image *>();
+
+    int splitcount = (img->width - splitwidth + 1) * (img->height - splitheight + 1);
+    int splitsize = splitwidth * splitheight;
+    unsigned char **out = 0;
+    unsigned char **h_out = (unsigned char **)malloc(sizeof(unsigned char *) * splitcount);
+    for (int i = 0; i < splitcount; i++)
+    {
+        CHECK_CUDA(cudaMalloc(&(h_out[i]), sizeof(unsigned char) * splitsize));
+    }
+    CHECK_CUDA(cudaMalloc(&out, sizeof(unsigned char *) * splitcount));
+    CHECK_CUDA(cudaMemcpy(out, h_out, sizeof(unsigned char *) * splitcount, cudaMemcpyHostToDevice));
+    int blockn = (img->width * img->height + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::splitSingleChannelTemplate<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], out, img->width, img->height, splitwidth, splitheight);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    for (int i = 0; i < splitcount; i++)
+    {
+        Image *x = jpegde::getInstance().createImage(h_out[i], splitwidth, splitheight);
+        res->push_back(x);
+    }
+    CHECK_CUDA(cudaFree(out));
+    free(h_out);
+
+    MEASURE_TIME2("extractCandidatesForMatching");
+    return res;
 }

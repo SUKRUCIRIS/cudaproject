@@ -88,9 +88,17 @@ SKR::jpegde::~jpegde()
 void SKR::jpegde::freeJPEG(Image *image)
 {
     MEASURE_TIME1;
-    for (int i = 0; i < NVJPEG_MAX_COMPONENT; i++)
+    if (image->image.channel[0] != image->image.channel[1])
     {
-        CHECK_CUDA(cudaFree(image->image.channel[i]));
+        for (int i = 0; i < NVJPEG_MAX_COMPONENT; i++)
+        {
+            CHECK_CUDA(cudaFree(image->image.channel[i]));
+        }
+    }
+    else
+    {
+        // single channel
+        CHECK_CUDA(cudaFree(image->image.channel[0]));
     }
 
     delete image;
@@ -158,6 +166,7 @@ SKR::Image *SKR::jpegde::createImage(unsigned char *r, unsigned char *g, unsigne
     x->image.channel[0] = r;
     x->image.channel[1] = g;
     x->image.channel[2] = b;
+    x->image.channel[3] = 0;
     x->image.pitch[0] = width;
     x->image.pitch[1] = width;
     x->image.pitch[2] = width;
@@ -171,14 +180,10 @@ SKR::Image *SKR::jpegde::createImage(unsigned char *r, int width, int height)
     Image *x = new Image;
     x->width = width;
     x->height = height;
-    unsigned char *g = 0, *b = 0;
-    CHECK_CUDA(cudaMalloc(&g, sizeof(unsigned char) * width * height));
-    CHECK_CUDA(cudaMalloc(&b, sizeof(unsigned char) * width * height));
-    CHECK_CUDA(cudaMemcpy(g, r, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToDevice));
-    CHECK_CUDA(cudaMemcpy(b, r, sizeof(unsigned char) * width * height, cudaMemcpyDeviceToDevice));
     x->image.channel[0] = r;
-    x->image.channel[1] = g;
-    x->image.channel[2] = b;
+    x->image.channel[1] = r;
+    x->image.channel[2] = r;
+    x->image.channel[3] = 0;
     x->image.pitch[0] = width;
     x->image.pitch[1] = width;
     x->image.pitch[2] = width;
