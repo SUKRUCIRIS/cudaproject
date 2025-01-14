@@ -290,6 +290,15 @@ __global__ void SKR::kernels::getMults(float *data1, float *data2, float *mults,
     }
 }
 
+__global__ void SKR::kernels::getMultsOneSingle(float *data1, float data2, unsigned int count)
+{
+    unsigned int tindex = blockDim.x * blockIdx.x + threadIdx.x;
+    if (tindex < count)
+    {
+        data1[tindex] = data1[tindex] * data2;
+    }
+}
+
 __global__ void SKR::kernels::getNonSquaredDeviations(unsigned char *data, float mean, float *nsd, unsigned int count)
 {
     unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
@@ -368,6 +377,45 @@ __global__ void SKR::kernels::splitSingleChannelTemplate(unsigned char *in, unsi
     }
 }
 
+__global__ void SKR::kernels::splitSingleChannelTemplateIndex(unsigned char *in, unsigned char *out, int width, int height, int splitwidth, int splitheight, int index)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < splitwidth * splitheight)
+    {
+        unsigned int localcolumn = GET_MCOLUMN(tindex, splitwidth);
+        unsigned int localrow = GET_MROW(tindex, splitwidth);
+        unsigned int column = localcolumn + GET_MCOLUMN(index, width);
+        unsigned int row = localrow + GET_MROW(index, width);
+        out[tindex] = in[GET_MINDEX(row, column, width)];
+    }
+}
+
+__global__ void SKR::kernels::splitSingleChannelTemplateIndexMultiple(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight, int index, int count)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    unsigned int batchIndex = tindex / (splitwidth * splitheight);
+    unsigned int localIndex = tindex % (splitwidth * splitheight);
+
+    if (batchIndex < count)
+    {
+        unsigned int globalIndex = index + batchIndex;
+        unsigned int globalColumn = GET_MCOLUMN(globalIndex, width);
+        unsigned int globalRow = GET_MROW(globalIndex, width);
+
+        if (globalColumn + splitwidth <= width && globalRow + splitheight <= height)
+        {
+            unsigned int localcolumn = GET_MCOLUMN(localIndex, splitwidth);
+            unsigned int localrow = GET_MROW(localIndex, splitwidth);
+            unsigned int column = localcolumn + globalColumn;
+            unsigned int row = localrow + globalRow;
+            out[batchIndex][localIndex] = in[GET_MINDEX(row, column, width)];
+        }
+        else
+        {
+            out[batchIndex][localIndex] = 0;
+        }
+    }
+}
 SKR::imageprocess::imageprocess()
 {
     CHECK_CUDA(cudaStreamCreate(&stream));
@@ -536,6 +584,63 @@ float SKR::imageprocess::getSum(unsigned char *img, unsigned int count)
     return res;
 }
 
+void SKR::imageprocess::getSumMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                                   unsigned int batch_count, float **sum1,
+                                                   float **sum2, float *result)
+{
+    MEASURE_TIME1;
+    int blockn = (pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    for (int i = 0; i < batch_count; i++)
+    {
+        SKR::kernels::getSum<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img[i], sum1[i], pixel_count);
+    }
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+
+    if (blockn <= 1)
+    {
+        for (int i = 0; i < batch_count; i++)
+        {
+            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+        }
+        MEASURE_TIME2("getSumMultiplePreAllocated");
+    }
+
+    int before_blockn = blockn;
+    blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+
+    while (1)
+    {
+        for (int i = 0; i < batch_count; i++)
+        {
+            SKR::kernels::getSumFloat<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sum1[i], sum2[i], before_blockn);
+        }
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        for (int i = 0; i < batch_count; i++)
+        {
+            CHECK_CUDA(cudaMemcpy(sum1[i], sum2[i], sizeof(float) * blockn, cudaMemcpyDeviceToDevice));
+        }
+        if (blockn == 1)
+        {
+            for (int i = 0; i < batch_count; i++)
+            {
+                CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+            }
+            break;
+        }
+        before_blockn = blockn;
+        if (blockn <= MAX_CUDA_THREADS_PER_BLOCK)
+        {
+            blockn = 1;
+        }
+        else
+        {
+            blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+        }
+    }
+
+    MEASURE_TIME2("getSumMultiplePreAllocated");
+}
+
 float SKR::imageprocess::getSum(float *img, unsigned int count)
 {
     MEASURE_TIME1;
@@ -584,6 +689,62 @@ float SKR::imageprocess::getSum(float *img, unsigned int count)
     CHECK_CUDA(cudaFree(result2));
     MEASURE_TIME2("getSum");
     return res;
+}
+
+void SKR::imageprocess::getSumMultiplePreAllocated(float **img, unsigned int pixel_count, unsigned int batch_count,
+                                                   float **sum1, float **sum2, float *result)
+{
+    MEASURE_TIME1;
+    int blockn = (pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    for (int i = 0; i < batch_count; i++)
+    {
+        SKR::kernels::getSumFloat<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img[i], sum1[i], pixel_count);
+    }
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+
+    if (blockn <= 1)
+    {
+        for (int i = 0; i < batch_count; i++)
+        {
+            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+        }
+        MEASURE_TIME2("getSumMultiplePreAllocated");
+    }
+
+    int before_blockn = blockn;
+    blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+
+    while (1)
+    {
+        for (int i = 0; i < batch_count; i++)
+        {
+            SKR::kernels::getSumFloat<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sum1[i], sum2[i], before_blockn);
+        }
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        for (int i = 0; i < batch_count; i++)
+        {
+            CHECK_CUDA(cudaMemcpy(sum1[i], sum2[i], sizeof(float) * blockn, cudaMemcpyDeviceToDevice));
+        }
+        if (blockn == 1)
+        {
+            for (int i = 0; i < batch_count; i++)
+            {
+                CHECK_CUDA(cudaMemcpy(&(result[i]), sum2[i], sizeof(float), cudaMemcpyDeviceToHost));
+            }
+            break;
+        }
+        before_blockn = blockn;
+        if (blockn <= MAX_CUDA_THREADS_PER_BLOCK)
+        {
+            blockn = 1;
+        }
+        else
+        {
+            blockn = (blockn + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+        }
+    }
+
+    MEASURE_TIME2("getSumMultiplePreAllocated");
 }
 
 float SKR::imageprocess::getMin(float *img, unsigned int count)
@@ -689,6 +850,18 @@ float SKR::imageprocess::getMax(float *img, unsigned int count)
 float SKR::imageprocess::getMean(Image *img)
 {
     return getSum(img) / (img->width * img->height);
+}
+
+void SKR::imageprocess::getMeanMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                                    unsigned int batch_count, float **sum1,
+                                                    float **sum2, float *sum3, float *result)
+{
+    getSumMultiplePreAllocated(img, pixel_count, batch_count, sum1, sum2, result);
+    CHECK_CUDA(cudaMemcpy(sum3, result, sizeof(float) * batch_count, cudaMemcpyHostToDevice));
+    int blockn = (batch_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::getMultsOneSingle<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sum3, 1.0f / (float)pixel_count, batch_count);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    CHECK_CUDA(cudaMemcpy(result, sum3, sizeof(float) * batch_count, cudaMemcpyDeviceToHost));
 }
 
 std::vector<SKR::Image *> *SKR::imageprocess::splitSingleChannel(Image *img, int splitwidth, int splitheight)
@@ -896,4 +1069,88 @@ std::vector<SKR::Image *> *SKR::imageprocess::extractCandidatesForMatching(Image
 
     MEASURE_TIME2("extractCandidatesForMatching");
     return res;
+}
+
+SKR::Image *SKR::imageprocess::extractCandidateForMatchingIndex(Image *img, int splitwidth, int splitheight, int index)
+{
+    if (img->image.channel[0] == 0 || img->width < splitwidth ||
+        img->height < splitheight || splitwidth == 0 || splitheight == 0 ||
+        img->width - splitwidth < GET_MCOLUMN(index, img->width) ||
+        img->height - splitheight < GET_MROW(index, img->width))
+    {
+        std::cout << "Invalid split parameters" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    unsigned char *out = 0;
+    CHECK_CUDA(cudaMalloc(&out, sizeof(unsigned char) * splitwidth * splitheight));
+    int blockn = (splitwidth * splitheight + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::splitSingleChannelTemplateIndex<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], out, img->width, img->height, splitwidth, splitheight, index);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    Image *res = jpegde::getInstance().createImage(out, splitwidth, splitheight);
+    MEASURE_TIME2("extractCandidateForMatchingIndex");
+    return res;
+}
+
+std::vector<SKR::Image *> *SKR::imageprocess::extractCandidatesForMatchingIndexMultiple(Image *img, int splitwidth, int splitheight,
+                                                                                        int index, int count)
+{
+    if (img->image.channel[0] == 0 || img->width < splitwidth || img->height < splitheight || splitwidth == 0 || splitheight == 0)
+    {
+        std::cout << "Invalid split parameters" << std::endl;
+        return 0;
+    }
+    MEASURE_TIME1;
+    std::vector<Image *> *res = new std::vector<Image *>();
+
+    int splitsize = splitwidth * splitheight;
+    unsigned char **out = 0;
+    unsigned char **h_out = (unsigned char **)malloc(sizeof(unsigned char *) * count);
+    for (int i = 0; i < count; i++)
+    {
+        CHECK_CUDA(cudaMalloc(&(h_out[i]), sizeof(unsigned char) * splitsize));
+    }
+    CHECK_CUDA(cudaMalloc(&out, sizeof(unsigned char *) * count));
+    CHECK_CUDA(cudaMemcpy(out, h_out, sizeof(unsigned char *) * count, cudaMemcpyHostToDevice));
+    int blockn = (splitsize * count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::splitSingleChannelTemplateIndexMultiple<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], out, img->width, img->height, splitwidth, splitheight, index, count);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    for (int i = 0; i < count; i++)
+    {
+        Image *x = jpegde::getInstance().createImage(h_out[i], splitwidth, splitheight);
+        res->push_back(x);
+    }
+    CHECK_CUDA(cudaFree(out));
+    free(h_out);
+
+    MEASURE_TIME2("extractCandidatesForMatchingIndexMultiple");
+    return res;
+}
+
+void SKR::imageprocess::extractCandidatesForMatchingIndexMultiplePreAllocated(Image *img, int splitwidth, int splitheight,
+                                                                              int index, int count, unsigned char **h_out,
+                                                                              unsigned char **out, Image *img_out)
+{
+    if (img->image.channel[0] == 0 || img->width < splitwidth || img->height < splitheight || splitwidth == 0 || splitheight == 0)
+    {
+        std::cout << "Invalid split parameters" << std::endl;
+        return;
+    }
+    MEASURE_TIME1;
+    int blockn = (splitwidth * splitheight * count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    SKR::kernels::splitSingleChannelTemplateIndexMultiple<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img->image.channel[0], out, img->width, img->height, splitwidth, splitheight, index, count);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    for (int i = 0; i < count; i++)
+    {
+        img_out[i].image.channel[0] = h_out[i];
+        img_out[i].image.channel[1] = h_out[i];
+        img_out[i].image.channel[2] = h_out[i];
+        img_out[i].image.channel[3] = 0;
+        img_out[i].width = splitwidth;
+        img_out[i].height = splitheight;
+        img_out[i].image.pitch[0] = splitwidth;
+        img_out[i].image.pitch[1] = splitwidth;
+        img_out[i].image.pitch[2] = splitwidth;
+    }
+    MEASURE_TIME2("extractCandidatesForMatchingIndexMultiplePreAllocated");
 }

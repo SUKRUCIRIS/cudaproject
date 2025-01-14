@@ -5,13 +5,23 @@ using namespace SKR;
 
 int main()
 {
-    std::vector<unsigned char> *encodedjpeg = jpegde::getInstance().readJPEG("./files/package_frames/11.jpg");
-    Image *decodedjpeg = jpegde::getInstance().decodeJPEG(*encodedjpeg);
+    std::string targetfilenames[7] = {
+        "./files/target_object/1.jpg",
+        "./files/target_object/2.jpg",
+        "./files/target_object/3.jpg",
+        "./files/target_object/4.jpg",
+        "./files/target_object/5.jpg",
+        "./files/target_object/6.jpg",
+        "./files/target_object/7.jpg",
+    };
 
-    imageprocess::getInstance().getGray(decodedjpeg);
+    TemplateMatcher *tm = new TemplateMatcher(targetfilenames, 7);
 
+    vec2i result = tm->detectObjectBatch("./files/package_frames/3.jpg");
 
-    delete encodedjpeg;
-    jpegde::getInstance().freeJPEG(decodedjpeg);
+    std::cout << "Result: " << result.x << " " << result.y << std::endl;
+
+    delete tm;
+
     return 0;
 }

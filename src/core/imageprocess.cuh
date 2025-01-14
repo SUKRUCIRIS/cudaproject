@@ -36,6 +36,8 @@ namespace SKR
 
         __global__ void getMults(float *data1, float *data2, float *mults, unsigned int count);
 
+        __global__ void getMultsOneSingle(float *data1, float data2, unsigned int count);
+
         __global__ void getNonSquaredDeviations(unsigned char *data, float mean, float *nsd, unsigned int count);
 
         __global__ void getSquaredDeviations(unsigned char *data, float mean, float *sd, unsigned int count);
@@ -45,6 +47,10 @@ namespace SKR
         __global__ void splitSingleChannel(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight);
 
         __global__ void splitSingleChannelTemplate(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight);
+
+        __global__ void splitSingleChannelTemplateIndex(unsigned char *in, unsigned char *out, int width, int height, int splitwidth, int splitheight, int index);
+
+        __global__ void splitSingleChannelTemplateIndexMultiple(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight, int index, int count);
     };
 
     class imageprocess
@@ -122,5 +128,51 @@ namespace SKR
 
         // I was gonna use this function for template matching but it uses so much GPU memory so I decided to not use it
         std::vector<Image *> *extractCandidatesForMatching(Image *img, int splitwidth, int splitheight);
+
+        Image *extractCandidateForMatchingIndex(Image *img, int splitwidth, int splitheight, int index);
+
+        std::vector<Image *> *extractCandidatesForMatchingIndexMultiple(Image *img, int splitwidth, int splitheight,
+                                                                        int index, int count);
+
+        // preallocated memory version of the function above so it is faster
+        // img_out must be preallocated on CPU with count * sizeof(Image)
+        // out must be preallocated on GPU with count * sizeof(unsigned char *)
+        // h_out must be preallocated on CPU with count * sizeof(unsigned char *)
+        // and each element of h_out must be preallocated on GPU with splitwidth * splitheight
+        // h_out must be memcpyed to out before calling this function with cudaMemcpyHostToDevice
+        // h_out and out are for internal use, only use img_out for further processing
+        // after you are done with the processing of the batches, you must free the memories
+        // if you want to continue to use images, you shouldn't free h_out elements, you should just free h_out itself
+        // h_out elements are the image pixel pointers, if you free them, you will lose the images
+        // when you free the images, h_out elements will be freed automatically
+        void extractCandidatesForMatchingIndexMultiplePreAllocated(Image *img, int splitwidth, int splitheight,
+                                                                   int index, int count, unsigned char **h_out,
+                                                                   unsigned char **out, Image *img_out);
+
+        // preallocated memory version of the sum function so it is faster
+        // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
+        // sum1 and sum2 are for internal use, only use result value for further processing
+        // result must be preallocated on CPU with batch_count * sizeof(float)
+        void getSumMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                        unsigned int batch_count, float **sum1, float **sum2, float *result);
+
+        // preallocated memory version of the sum function so it is faster
+        // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
+        // sum1 and sum2 are for internal use, only use result value for further processing
+        // result must be preallocated on CPU with batch_count * sizeof(float)
+        void getSumMultiplePreAllocated(float **img, unsigned int pixel_count, unsigned int batch_count,
+                                        float **sum1, float **sum2, float *result);
+
+        // preallocated memory version of the mean function so it is faster
+        // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
+        // sum3 must be preallocated on GPU with batch_count * sizeof(float)
+        // sum1, sum2 and sum3 are for internal use, only use result value for further processing
+        // result must be preallocated on CPU with batch_count * sizeof(float)
+        void getMeanMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                         unsigned int batch_count, float **sum1,
+                                         float **sum2, float *sum3, float *result);
     };
 };
