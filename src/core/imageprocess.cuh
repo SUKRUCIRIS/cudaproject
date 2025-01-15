@@ -51,6 +51,8 @@ namespace SKR
         __global__ void splitSingleChannelTemplateIndex(unsigned char *in, unsigned char *out, int width, int height, int splitwidth, int splitheight, int index);
 
         __global__ void splitSingleChannelTemplateIndexMultiple(unsigned char *in, unsigned char **out, int width, int height, int splitwidth, int splitheight, int index, int count);
+
+        __global__ void getSSIM(float *mean1, float mean2, float *variance1, float variance2, float *covariance, unsigned int count, float *result, float c1, float c2);
     };
 
     class imageprocess
@@ -147,13 +149,13 @@ namespace SKR
         // when you free the images, h_out elements will be freed automatically
         void extractCandidatesForMatchingIndexMultiplePreAllocated(Image *img, int splitwidth, int splitheight,
                                                                    int index, int count, unsigned char **h_out,
-                                                                   unsigned char **out, Image *img_out);
+                                                                   unsigned char **out, unsigned char **img_out);
 
         // preallocated memory version of the sum function so it is faster
         // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
         // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
         // sum1 and sum2 are for internal use, only use result value for further processing
-        // result must be preallocated on CPU with batch_count * sizeof(float)
+        // result must be preallocated on GPU with batch_count * sizeof(float)
         void getSumMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
                                         unsigned int batch_count, float **sum1, float **sum2, float *result);
 
@@ -161,18 +163,45 @@ namespace SKR
         // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
         // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
         // sum1 and sum2 are for internal use, only use result value for further processing
-        // result must be preallocated on CPU with batch_count * sizeof(float)
+        // result must be preallocated on GPU with batch_count * sizeof(float)
         void getSumMultiplePreAllocated(float **img, unsigned int pixel_count, unsigned int batch_count,
                                         float **sum1, float **sum2, float *result);
 
         // preallocated memory version of the mean function so it is faster
         // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
         // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
-        // sum3 must be preallocated on GPU with batch_count * sizeof(float)
-        // sum1, sum2 and sum3 are for internal use, only use result value for further processing
-        // result must be preallocated on CPU with batch_count * sizeof(float)
+        // sum1, sum2 are for internal use, only use result value for further processing
+        // result must be preallocated on GPU with batch_count * sizeof(float)
         void getMeanMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
                                          unsigned int batch_count, float **sum1,
-                                         float **sum2, float *sum3, float *result);
+                                         float **sum2, float *result);
+
+        // preallocated memory version of the variance function so it is faster
+        // sd must be preallocated on CPU with batch_count * sizeof(float *)
+        // sd members must be preallocated on GPU with pixel_count * sizeof(float)
+        // result must be preallocated on GPU with batch_count * sizeof(float)
+        // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
+        void getVarianceMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                             unsigned int batch_count, float *pre_mean, float **sd,
+                                             float **sum1, float **sum2, float *result);
+
+        // preallocated memory version of the covariance function so it is faster
+        // sd1 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sd1 members must be preallocated on GPU with pixel_count * sizeof(float)
+        // sd2 must be preallocated on GPU with pixel_count * sizeof(float)
+        // mults must be preallocated on CPU with batch_count * sizeof(float *)
+        // mults members must be preallocated on GPU with pixel_count * sizeof(float)
+        // result must be preallocated on GPU with batch_count * sizeof(float)
+        // sum1 and sum2 must be preallocated on CPU with batch_count * sizeof(float *)
+        // sum1 and sum2 members must be preallocated on GPU with ((pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK) * sizeof(float)
+        void getCovarianceMultiplePreAllocated(unsigned char **img1, unsigned char *img2, unsigned int pixel_count,
+                                               unsigned int batch_count, float *pre_mean1, float pre_mean2, float **sd1,
+                                               float *sd2, float **mults, float **sum1, float **sum2, float *result);
+
+        // result must be preallocated on GPU with batch_count * sizeof(float)
+        void getSSIMMultiplePreAllocated(float *pre_mean1, float pre_mean2, float *pre_variance1, float pre_variance2,
+                                         float *covariance, unsigned int batch_count, float *result,
+                                         float K1 = 0.01F, float K2 = 0.03F, float L = 255.0F);
     };
 };

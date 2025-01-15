@@ -416,6 +416,18 @@ __global__ void SKR::kernels::splitSingleChannelTemplateIndexMultiple(unsigned c
         }
     }
 }
+
+__global__ void SKR::kernels::getSSIM(float *mean1, float mean2, float *variance1, float variance2,
+                                      float *covariance, unsigned int count, float *result, float c1, float c2)
+{
+    unsigned int tindex = threadIdx.x + blockDim.x * blockIdx.x;
+    if (tindex < count)
+    {
+        result[tindex] = ((2 * mean1[tindex] * mean2 + c1) * (2 * covariance[tindex] + c2)) /
+                         ((mean1[tindex] * mean1[tindex] + mean2 * mean2 + c1) * (variance1[tindex] + variance2 + c2));
+    }
+}
+
 SKR::imageprocess::imageprocess()
 {
     CHECK_CUDA(cudaStreamCreate(&stream));
@@ -600,7 +612,7 @@ void SKR::imageprocess::getSumMultiplePreAllocated(unsigned char **img, unsigned
     {
         for (int i = 0; i < batch_count; i++)
         {
-            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToDevice));
         }
         MEASURE_TIME2("getSumMultiplePreAllocated");
     }
@@ -623,7 +635,7 @@ void SKR::imageprocess::getSumMultiplePreAllocated(unsigned char **img, unsigned
         {
             for (int i = 0; i < batch_count; i++)
             {
-                CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+                CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToDevice));
             }
             break;
         }
@@ -706,7 +718,7 @@ void SKR::imageprocess::getSumMultiplePreAllocated(float **img, unsigned int pix
     {
         for (int i = 0; i < batch_count; i++)
         {
-            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToHost));
+            CHECK_CUDA(cudaMemcpy(&(result[i]), sum1[i], sizeof(float), cudaMemcpyDeviceToDevice));
         }
         MEASURE_TIME2("getSumMultiplePreAllocated");
     }
@@ -729,7 +741,7 @@ void SKR::imageprocess::getSumMultiplePreAllocated(float **img, unsigned int pix
         {
             for (int i = 0; i < batch_count; i++)
             {
-                CHECK_CUDA(cudaMemcpy(&(result[i]), sum2[i], sizeof(float), cudaMemcpyDeviceToHost));
+                CHECK_CUDA(cudaMemcpy(&(result[i]), sum2[i], sizeof(float), cudaMemcpyDeviceToDevice));
             }
             break;
         }
@@ -854,14 +866,13 @@ float SKR::imageprocess::getMean(Image *img)
 
 void SKR::imageprocess::getMeanMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
                                                     unsigned int batch_count, float **sum1,
-                                                    float **sum2, float *sum3, float *result)
+                                                    float **sum2, float *result)
 {
     getSumMultiplePreAllocated(img, pixel_count, batch_count, sum1, sum2, result);
-    CHECK_CUDA(cudaMemcpy(sum3, result, sizeof(float) * batch_count, cudaMemcpyHostToDevice));
     int blockn = (batch_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
-    SKR::kernels::getMultsOneSingle<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sum3, 1.0f / (float)pixel_count, batch_count);
+    SKR::kernels::getMultsOneSingle<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(result, 1.0f / (float)pixel_count,
+                                                                                       batch_count);
     CHECK_CUDA(cudaStreamSynchronize(stream));
-    CHECK_CUDA(cudaMemcpy(result, sum3, sizeof(float) * batch_count, cudaMemcpyDeviceToHost));
 }
 
 std::vector<SKR::Image *> *SKR::imageprocess::splitSingleChannel(Image *img, int splitwidth, int splitheight)
@@ -923,6 +934,23 @@ float SKR::imageprocess::getVariance(Image *img, float *pre_mean)
     return res;
 }
 
+void SKR::imageprocess::getVarianceMultiplePreAllocated(unsigned char **img, unsigned int pixel_count,
+                                                        unsigned int batch_count, float *pre_mean, float **sd,
+                                                        float **sum1, float **sum2, float *result)
+{
+    MEASURE_TIME1;
+    int blockn = (pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    float mean = 0;
+    for (int i = 0; i < batch_count; i++)
+    {
+        CHECK_CUDA(cudaMemcpy(&mean, pre_mean + i, sizeof(float), cudaMemcpyDeviceToHost));
+        SKR::kernels::getSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img[i], mean, sd[i], pixel_count);
+    }
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    getSumMultiplePreAllocated(sd, pixel_count, batch_count, sum1, sum2, result);
+    MEASURE_TIME2("getVarianceMultiplePreAllocated");
+}
+
 float SKR::imageprocess::getStandardDeviation(Image *img, float *pre_mean)
 {
     return sqrtf(getVariance(img, pre_mean));
@@ -970,6 +998,29 @@ float SKR::imageprocess::getCovariance(Image *img1, Image *img2, float *pre_mean
     CHECK_CUDA(cudaFree(mults));
     MEASURE_TIME2("getCovariance");
     return res;
+}
+
+void SKR::imageprocess::getCovarianceMultiplePreAllocated(unsigned char **img1, unsigned char *img2, unsigned int pixel_count,
+                                                          unsigned int batch_count, float *pre_mean1, float pre_mean2, float **sd1,
+                                                          float *sd2, float **mults, float **sum1, float **sum2, float *result)
+{
+    MEASURE_TIME1;
+    int blockn = (pixel_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    float mean = 0;
+    for (int i = 0; i < batch_count; i++)
+    {
+        CHECK_CUDA(cudaMemcpy(&mean, pre_mean1 + i, sizeof(float), cudaMemcpyDeviceToHost));
+        SKR::kernels::getNonSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img1[i], mean, sd1[i], pixel_count);
+    }
+    SKR::kernels::getNonSquaredDeviations<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(img2, pre_mean2, sd2, pixel_count);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    for (int i = 0; i < batch_count; i++)
+    {
+        SKR::kernels::getMults<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(sd1[i], sd2, mults[i], pixel_count);
+    }
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    getSumMultiplePreAllocated(mults, pixel_count, batch_count, sum1, sum2, result);
+    MEASURE_TIME2("getCovarianceMultiplePreAllocated");
 }
 
 float SKR::imageprocess::getSSIM(Image *img1, Image *img2, float K1, float K2, float L, float *pre_mean1, float *pre_mean2)
@@ -1032,8 +1083,23 @@ float SKR::imageprocess::getSSIMOneIsPreCalculated(Image *img1, Image *img2, flo
     float covariance = getCovariance(img1, img2, &mean1, &pre_mean2);
     float ssim = ((2 * mean1 * pre_mean2 + C1) * (2 * covariance + C2)) /
                  ((mean1 * mean1 + pre_mean2 * pre_mean2 + C1) * (variance1 + pre_variance2 + C2));
-    MEASURE_TIME2("getSSIM");
+    MEASURE_TIME2("getSSIMOneIsPreCalculated");
     return ssim;
+}
+
+void SKR::imageprocess::getSSIMMultiplePreAllocated(float *pre_mean1, float pre_mean2, float *pre_variance1, float pre_variance2,
+                                                    float *covariance, unsigned int batch_count, float *result,
+                                                    float K1, float K2, float L)
+{
+    MEASURE_TIME1;
+    int blockn = (batch_count + (MAX_CUDA_THREADS_PER_BLOCK - 1)) / MAX_CUDA_THREADS_PER_BLOCK;
+    float C1 = (K1 * L) * (K1 * L);
+    float C2 = (K2 * L) * (K2 * L);
+    SKR::kernels::getSSIM<<<blockn, MAX_CUDA_THREADS_PER_BLOCK, 0, stream>>>(pre_mean1, pre_mean2, pre_variance1,
+                                                                             pre_variance2, covariance, batch_count,
+                                                                             result, C1, C2);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+    MEASURE_TIME2("getSSIMMultiplePreAllocated");
 }
 
 std::vector<SKR::Image *> *SKR::imageprocess::extractCandidatesForMatching(Image *img, int splitwidth, int splitheight)
@@ -1129,7 +1195,7 @@ std::vector<SKR::Image *> *SKR::imageprocess::extractCandidatesForMatchingIndexM
 
 void SKR::imageprocess::extractCandidatesForMatchingIndexMultiplePreAllocated(Image *img, int splitwidth, int splitheight,
                                                                               int index, int count, unsigned char **h_out,
-                                                                              unsigned char **out, Image *img_out)
+                                                                              unsigned char **out, unsigned char **img_out)
 {
     if (img->image.channel[0] == 0 || img->width < splitwidth || img->height < splitheight || splitwidth == 0 || splitheight == 0)
     {
@@ -1142,15 +1208,7 @@ void SKR::imageprocess::extractCandidatesForMatchingIndexMultiplePreAllocated(Im
     CHECK_CUDA(cudaStreamSynchronize(stream));
     for (int i = 0; i < count; i++)
     {
-        img_out[i].image.channel[0] = h_out[i];
-        img_out[i].image.channel[1] = h_out[i];
-        img_out[i].image.channel[2] = h_out[i];
-        img_out[i].image.channel[3] = 0;
-        img_out[i].width = splitwidth;
-        img_out[i].height = splitheight;
-        img_out[i].image.pitch[0] = splitwidth;
-        img_out[i].image.pitch[1] = splitwidth;
-        img_out[i].image.pitch[2] = splitwidth;
+        img_out[i] = h_out[i];
     }
     MEASURE_TIME2("extractCandidatesForMatchingIndexMultiplePreAllocated");
 }
